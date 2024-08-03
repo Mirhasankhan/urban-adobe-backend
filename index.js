@@ -28,6 +28,7 @@ async function run() {
         const db = client.db("urbanAdobe");
         const usersCollection = db.collection("users");
         const listingCollection = db.collection("listings");
+        const buyCollection = db.collection("buys");
         // User Registration
         app.post("/api/v1/register", async (req, res) => {
             const { name, email, password, role } = req.body;
@@ -40,7 +41,6 @@ async function run() {
                     message: "User already exists",
                 });
             }
-            console.log(password)
 
             // Hash the password
             // const hashedPassword = await bcrypt.hash(password, 10);
@@ -75,7 +75,7 @@ async function run() {
             }
 
             // Generate JWT token
-            const token = jwt.sign({ email: user.email,name:user.name }, process.env.JWT_SECRET, {
+            const token = jwt.sign({ email: user.email, name: user.name, role: user.role }, process.env.JWT_SECRET, {
                 expiresIn: process.env.EXPIRES_IN,
             });
 
@@ -94,17 +94,29 @@ async function run() {
             await listingCollection.insertOne(listing);
             res.json({
                 success: true,
-                message: "listing created successful",
-                listing:listing
+                message: "listing created successfully",
+                listing: listing
             });
 
         })
 
         //get all listings
-        app.get("/api/v1/all-listings",async (req,res)=>{
-            const result = await listingCollection.find().toArray()          
-            res.send(result)
-        })
+        app.get("/api/v1/all-listings", async (req, res) => {
+            try {
+                const email = req.query.email;
+                let query = {};
+
+                if (email) {
+                    query = { "sellerEmail": email };
+                }
+
+                const result = await listingCollection.find(query).toArray();
+                res.send(result);
+            } catch (error) {
+                console.error("Error fetching listings:", error);
+                res.status(500).send("An error occurred while fetching listings");
+            }
+        });
 
         //get single listing
         app.get("/api/v1/listing/:id", async (req, res) => {
@@ -112,7 +124,71 @@ async function run() {
             const filter = { _id: new ObjectId(id) };
             const result = await listingCollection.find(filter).toArray();
             res.send(result);
-          });
+        });
+
+        app.post("/api/v1/buy-property", async (req, res) => {
+            const property = req.body
+            await buyCollection.insertOne(property);
+            res.json({
+                success: true,
+                message: "Buying proposol submitted, wait for the response!!",
+                property: property
+            });
+
+        })
+
+        app.get("/api/v1/all-buys", async (req, res) => {
+            try {
+                const email = req.query.email;
+                let query = {};
+
+                if (email) {
+                    query = { email: email };
+                }
+
+                const result = await buyCollection.find(query).toArray();
+                res.send(result);
+            } catch (error) {
+                console.error("Error fetching property:", error);
+                res.status(500).send("An error occurred while fetching property");
+            }
+        });
+        app.get("/api/v1/sales", async (req, res) => {
+            try {
+                const email = req.query.email;
+                let query = {};
+
+                if (email) {
+                    query = { sellerEmail: email };
+                }
+
+                const result = await buyCollection.find(query).toArray();
+                res.send(result);
+            } catch (error) {
+                console.error("Error fetching sales:", error);
+                res.status(500).send("An error occurred while fetching property");
+            }
+        });
+
+        app.delete("/api/v1/sales/:id", async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            try {
+                const result = await buyCollection.deleteOne(filter); // Await the deleteOne operation
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ error: 'An error occurred while deleting the sale' });
+            }
+        });
+
+        app.put("/api/v1/sales/:id", async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const update = { $set: { status: "Deal Confirmed" } };
+            const result = await buyCollection.updateOne(filter, update);
+            res.send({ message: 'Sale status updated to accepted', result });
+
+        });
 
         // Start the server
         app.listen(port, () => {
