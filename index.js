@@ -15,196 +15,219 @@ app.use(express.json());
 // MongoDB Connection URL
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 });
 
 async function run() {
-    try {
-        // Connect to MongoDB
-        await client.connect();
-        console.log("Connected to MongoDB");
+  try {
+    // Connect to MongoDB
+    await client.connect();
+    console.log("Connected to MongoDB");
 
-        const db = client.db("urbanAdobe");
-        const usersCollection = db.collection("users");
-        const listingCollection = db.collection("listings");
-        const buyCollection = db.collection("buys");
-        // User Registration
-        app.post("/api/v1/register", async (req, res) => {
-            const { name, email, password, role } = req.body;
+    const db = client.db("urbanAdobe");
+    const usersCollection = db.collection("users");
+    const listingCollection = db.collection("listings");
+    const buyCollection = db.collection("buys");
+    // User Registration
+    app.post("/api/v1/register", async (req, res) => {
+      const { name, email, password, role } = req.body;
 
-            // Check if email already exists
-            const existingUser = await usersCollection.findOne({ email });
-            if (existingUser) {
-                return res.status(400).json({
-                    success: false,
-                    message: "User already exists",
-                });
-            }
-
-            // Hash the password
-            // const hashedPassword = await bcrypt.hash(password, 10);
-            // console.log(hashedPassword)
-
-            // Insert user into the database
-            await usersCollection.insertOne({
-                name,
-                email,
-                role,
-                password,
-            });
-
-            res.status(201).json({
-                success: true,
-                message: "User registered successfully",
-            });
+      // Check if email already exists
+      const existingUser = await usersCollection.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "User already exists",
         });
+      }
 
-        // User Login
-        app.post("/api/v1/login", async (req, res) => {
-            const { email, password } = req.body;
+      // Hash the password
+      // const hashedPassword = await bcrypt.hash(password, 10);
+      // console.log(hashedPassword)
 
-            const user = await usersCollection.findOne({ email });
-            if (!user) {
-                return res.status(401).json({ message: "user not found" });
-            }
+      // Insert user into the database
+      await usersCollection.insertOne({
+        name,
+        email,
+        role,
+        password,
+      });
 
-            const isPasswordValid = user.password == password
-            if (!isPasswordValid) {
-                return res.status(401).json({ message: "password is wrong" });
-            }
+      res.status(201).json({
+        success: true,
+        message: "User registered successfully",
+      });
+    });
 
-            // Generate JWT token
-            const token = jwt.sign({ email: user.email, name: user.name, role: user.role }, process.env.JWT_SECRET, {
-                expiresIn: process.env.EXPIRES_IN,
-            });
+    // User Login
+    app.post("/api/v1/login", async (req, res) => {
+      const { email, password } = req.body;
 
-            res.json({
-                success: true,
-                message: "Login successful",
-                email: req.body.email,
-                token,
-                role: user.role,
-            });
-        });
+      const user = await usersCollection.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ message: "user not found" });
+      }
 
-        // add listing
-        app.post("/api/v1/create-listing", async (req, res) => {
-            const listing = req.body
-            await listingCollection.insertOne(listing);
-            res.json({
-                success: true,
-                message: "listing created successfully",
-                listing: listing
-            });
+      const isPasswordValid = user.password == password;
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "password is wrong" });
+      }
 
-        })
+      // Generate JWT token
+      const token = jwt.sign(
+        { email: user.email, name: user.name, role: user.role },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: process.env.EXPIRES_IN,
+        }
+      );
 
-        //get all listings
-        app.get("/api/v1/all-listings", async (req, res) => {
-            try {
-                const email = req.query.email;
-                let query = {};
+      res.json({
+        success: true,
+        message: "Login successful",
+        email: req.body.email,
+        token,
+        role: user.role,
+      });
+    });
 
-                if (email) {
-                    query = { "sellerEmail": email };
-                }
+    app.get("/api/v1/users", async (req, res) => {
+      try {
+        const result = await usersCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching sales:", error);
+        res.status(500).send("An error occurred while fetching property");
+      }
+    });
 
-                const result = await listingCollection.find(query).toArray();
-                res.send(result);
-            } catch (error) {
-                console.error("Error fetching listings:", error);
-                res.status(500).send("An error occurred while fetching listings");
-            }
-        });
+    // add listing
+    app.post("/api/v1/create-listing", async (req, res) => {
+      const listing = req.body;
+      await listingCollection.insertOne(listing);
+      res.json({
+        success: true,
+        message: "listing created successfully",
+        listing: listing,
+      });
+    });
 
-        //get single listing
-        app.get("/api/v1/listing/:id", async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await listingCollection.find(filter).toArray();
-            res.send(result);
-        });
+    //get all listings
+    app.get("/api/v1/all-listings", async (req, res) => {
+      try {
+        const email = req.query.email;
+        const type = req.query.type;
+        const search = req.query.search; // Capture search query
+        let query = {};
 
-        app.post("/api/v1/buy-property", async (req, res) => {
-            const property = req.body
-            await buyCollection.insertOne(property);
-            res.json({
-                success: true,
-                message: "Buying proposol submitted, wait for the response!!",
-                property: property
-            });
+        if (email) {
+          query.sellerEmail = email;
+        }
 
-        })
+        if (type) {
+          query.type = type;
+        }
 
-        app.get("/api/v1/all-buys", async (req, res) => {
-            try {
-                const email = req.query.email;
-                let query = {};
+        if (search) {
+          query.address = { $regex: search, $options: "i" };
+        }
 
-                if (email) {
-                    query = { email: email };
-                }
+        const result = await listingCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching listings:", error);
+        res.status(500).send("An error occurred while fetching listings");
+      }
+    });
 
-                const result = await buyCollection.find(query).toArray();
-                res.send(result);
-            } catch (error) {
-                console.error("Error fetching property:", error);
-                res.status(500).send("An error occurred while fetching property");
-            }
-        });
-        app.get("/api/v1/sales", async (req, res) => {
-            try {
-                const email = req.query.email;
-                let query = {};
+    //get single listing
+    app.get("/api/v1/listing/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const result = await listingCollection.find(filter).toArray();
+      res.send(result);
+    });
 
-                if (email) {
-                    query = { sellerEmail: email };
-                }
+    app.post("/api/v1/buy-property", async (req, res) => {
+      const property = req.body;
+      await buyCollection.insertOne(property);
+      res.json({
+        success: true,
+        message: "Buying proposol submitted, wait for the response!!",
+        property: property,
+      });
+    });
 
-                const result = await buyCollection.find(query).toArray();
-                res.send(result);
-            } catch (error) {
-                console.error("Error fetching sales:", error);
-                res.status(500).send("An error occurred while fetching property");
-            }
-        });
+    app.get("/api/v1/all-buys", async (req, res) => {
+      try {
+        const email = req.query.email;
+        let query = {};
 
-        app.delete("/api/v1/sales/:id", async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            try {
-                const result = await buyCollection.deleteOne(filter); // Await the deleteOne operation
-                res.send(result);
-            } catch (error) {
-                res.status(500).send({ error: 'An error occurred while deleting the sale' });
-            }
-        });
+        if (email) {
+          query = { email: email };
+        }
 
-        app.put("/api/v1/sales/:id", async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const update = { $set: { status: "Deal Confirmed" } };
-            const result = await buyCollection.updateOne(filter, update);
-            res.send({ message: 'Sale status updated to accepted', result });
+        const result = await buyCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching property:", error);
+        res.status(500).send("An error occurred while fetching property");
+      }
+    });
+    app.get("/api/v1/sales", async (req, res) => {
+      try {
+        const email = req.query.email;
+        let query = {};
 
-        });
+        if (email) {
+          query = { sellerEmail: email };
+        }
 
-        // Start the server
-        app.listen(port, () => {
-            console.log(`Server is running on http://localhost:${port}`);
-        });
-    } finally {
-    }
+        const result = await buyCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching sales:", error);
+        res.status(500).send("An error occurred while fetching property");
+      }
+    });
+
+    app.delete("/api/v1/sales/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      try {
+        const result = await buyCollection.deleteOne(filter); // Await the deleteOne operation
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ error: "An error occurred while deleting the sale" });
+      }
+    });
+
+    app.put("/api/v1/sales/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const update = { $set: { status: "Deal Confirmed" } };
+      const result = await buyCollection.updateOne(filter, update);
+      res.send({ message: "Sale status updated to accepted", result });
+    });
+
+    // Start the server
+    app.listen(port, () => {
+      console.log(`Server is running on http://localhost:${port}`);
+    });
+  } finally {
+  }
 }
 
 run().catch(console.dir);
 
 // Test route
 app.get("/", (req, res) => {
-    const serverStatus = {
-        message: "Server is running smoothly",
-        timestamp: new Date(),
-    };
-    res.json(serverStatus);
+  const serverStatus = {
+    message: "Server is running smoothly",
+    timestamp: new Date(),
+  };
+  res.json(serverStatus);
 });
