@@ -94,11 +94,44 @@ async function run() {
 
     app.get("/api/v1/users", async (req, res) => {
       try {
-        const result = await usersCollection.find().toArray();
+        const email = req.query.email;
+        let query = {};
+
+        if (email) {
+          query = { email: email };
+        }
+        const result = await usersCollection.find(query).toArray();
         res.send(result);
       } catch (error) {
-        console.error("Error fetching sales:", error);
-        res.status(500).send("An error occurred while fetching property");
+        console.error("Error fetching users:", error);
+        res.status(500).send("An error occurred while fetching users");
+      }
+    });
+
+    //update user
+
+    app.put("/api/v1/users/:id", async (req, res) => {
+      const userId = req.params.id;
+      const { phone, address } = req.body;
+
+      try {
+        const updateResult = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          {
+            $set: {
+              ...(phone && { phone }),
+              ...(address && { address }),
+            },
+          }
+        );
+
+        if (!updateResult) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        res.json({ message: "User updated successfully" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
       }
     });
 
